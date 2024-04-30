@@ -76,7 +76,9 @@ private:
     RT_TASK th_openComRobot;
     RT_TASK th_startRobot;
     RT_TASK th_move;
+    RT_TASK th_checkBattery;
     RT_TASK th_manageCamera;
+    RT_TASK th_takePicture;
     
     /**********************************************************************/
     /* Mutex                                                              */
@@ -85,7 +87,7 @@ private:
     RT_MUTEX mutex_robot;
     RT_MUTEX mutex_robotStarted;
     RT_MUTEX mutex_move;
-    RT_MUTEX camera;
+    RT_MUTEX mutex_camera;
 
     /**********************************************************************/
     /* Semaphores                                                         */
@@ -94,8 +96,10 @@ private:
     RT_SEM sem_openComRobot;
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
+    RT_SEM sem_getBattery;
     RT_SEM sem_openCam;
     RT_SEM sem_closeCam;
+    
 
     /**********************************************************************/
     /* Message queues                                                     */
@@ -135,15 +139,21 @@ private:
      * @brief Thread handling control of the robot.
      */
     void MoveTask(void *arg);
-
+    
     /**
+     * @brief Thread handling the level of battery.
+     */
+    void CheckBattery(void *arg);
+    
+     /**
      * @brief Thread handling the managament of the camera
      */
     void manageCameraTask(void *arg);
-
-
-
-
+    
+    /**
+     * @brief Thread handling the taking and sending of the picture , periodicly
+     */
+    void takePicturesTask(void *arg);
     
     /**********************************************************************/
     /* Queue services                                                     */
