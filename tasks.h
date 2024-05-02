@@ -65,8 +65,9 @@ private:
     ComMonitor monitor;
     ComRobot robot;
     int robotStarted = 0;
+    bool status_cam = false;
     int move = MESSAGE_ROBOT_STOP;
-    
+    image *img;
     /**********************************************************************/
     /* Tasks                                                              */
     /**********************************************************************/
@@ -79,7 +80,8 @@ private:
     RT_TASK th_checkBattery;
     RT_TASK th_manageCamera;
     RT_TASK th_takePicture;
-    
+    RT_TASK th_computePosition;
+
     /**********************************************************************/
     /* Mutex                                                              */
     /**********************************************************************/
@@ -99,6 +101,8 @@ private:
     RT_SEM sem_getBattery;
     RT_SEM sem_openCam;
     RT_SEM sem_closeCam;
+    RT_SEM sem_findPosition;
+    RT_SEM sem_stopPosition;
     
 
     /**********************************************************************/
@@ -154,6 +158,13 @@ private:
      * @brief Thread handling the taking and sending of the picture , periodicly
      */
     void takePicturesTask(void *arg);
+
+     /**
+    * @brief Thread handling the finding, drawing and send the robot's position
+    */
+    void computePositionTask(void *arg);
+
+
     
     /**********************************************************************/
     /* Queue services                                                     */

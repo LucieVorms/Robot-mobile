@@ -27,6 +27,7 @@
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
 #define PRIORITY_TBATTERY 19
+#define PRIORITY_TPOSITION 20
 
 
 /*
@@ -112,6 +113,15 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_sem_create(&sem_findPosition, NULL, 0, S_FIFO)){
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_sem_create(&sem_stopPosition, NULL, 0, S_FIFO)){
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+
     cout << "Semaphores created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -149,10 +159,14 @@ void Tasks::Init() {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-        if (err = rt_task_create(&th_takePicture, "th_takePicture", 0, PRIORITY_TCAMERA, 0)) {
+    if (err = rt_task_create(&th_takePicture, "th_takePicture", 0, PRIORITY_TCAMERA, 0)) {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
-        }
+    }
+    if (err = rt_task_create(&th_computePosition, "th_takePicture", 0, PRIORITY_TPOSITION, 0)) {
+        cerr << "Error task create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Tasks created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -206,6 +220,10 @@ void Tasks::Run() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_task_start(&th_takePicture, (void(*)(void*)) & Tasks::takePicturesTask, this)) {
+        cerr << "Error task start: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_task_start(&th_computePosition, (void(*)(void*)) & Tasks::takePicturesTask, this)) {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -325,6 +343,12 @@ void Tasks::ReceiveFromMonTask(void *arg) {
         }
         else if(msgRcv->CompareID(MESSAGE_CAM_CLOSE)){
             rt_sem_v(&sem_closeCam);
+        }
+        else if(msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_START)){
+            rt_sem_v(&sem_findPosition);
+        }
+        else if(msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_STOP)){
+            rt_sem_v(&sem_stopPosition);
         }
         delete(msgRcv); // mus be deleted manually, no consumer
     }
@@ -479,8 +503,8 @@ void Tasks::CheckBattery(void *arg) {
 void Tasks::manageCameraTask(void *arg) {
     Camera * cam;
     cam = new Camera(sm,10);
+
     Message * msgSend;
-    bool status_cam;
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
@@ -528,8 +552,7 @@ void Tasks::takePicturesTask(void *arg)
     //Declaration de la camera
     Camera * cam;
     cam = new Camera(sm,10);
-    //Declaration d'une image pour recuperer la photo prise
-    image *img;
+
     //Creation d'un message pour envoyer l'image
     MessageImg *msgImg;
     //Variable de lecture de la variable partagee status_cam
@@ -553,14 +576,30 @@ void Tasks::takePicturesTask(void *arg)
         rt_mutex_release(&mutex_camera);
 
         //prise de photo et envoie
-        if (sc == true) {
-        img = new Img(cam->Grab());
-        msgImg= new MessageIm(MESSAGE_CAM_IMAGE, img)
-        WriteInQueue(&q_messageToMon, msgImg); // msgImg will be deleted by sendToMon
+        if (sc == true)
+        {
+            img = new Img(cam->Grab());
+            msgImg= new MessageIm(MESSAGE_CAM_IMAGE, img)
+            WriteInQueue(&q_messageToMon, msgImg); // msgImg will be deleted by sendToMon
         }
     }
 
 }
+
+void Tasks::computePositionTask(void *arg)
+{
+
+    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
+    // Synchronization barrier (waiting that all tasks are starting)
+    rt_sem_p(&sem_barrier, TM_INFINITE);
+
+    /**************************************************************************************/
+    /* The task computePositionTask starts here                                                    */
+    /**************************************************************************************/
+    rt_sem_p(&sem_findPosition, TM_INFINITE);
+
+}
+
 
 /**
  * Write a message in a given queue
