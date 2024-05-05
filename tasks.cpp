@@ -33,23 +33,23 @@
  * Some remarks:
  * 1- This program is mostly a template. It shows you how to create tasks, semaphore
  *   message queues, mutex ... and how to use them
- * 
+ *
  * 2- semDumber is, as name say, useless. Its goal is only to show you how to use semaphore
- * 
+ *
  * 3- Data flow is probably not optimal
- * 
+ *
  * 4- Take into account that ComRobot::Write will block your task when serial buffer is full,
  *   time for internal buffer to flush
- * 
+ *
  * 5- Same behavior existe for ComMonitor::Write !
- * 
+ *
  * 6- When you want to write something in terminal, use cout and terminate with endl and flush
- * 
+ *
  * 7- Good luck !
  */
 
 /**
- * @brief Initialisation des structures de l'application (tâches, mutex, 
+ * @brief Initialisation des structures de l'application (tâches, mutex,
  * semaphore, etc.)
  */
 void Tasks::Init() {
@@ -79,6 +79,10 @@ void Tasks::Init() {
         cerr << "Error mutex create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_mutex_create(&mutex_getBattery, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Mutexes created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -96,10 +100,10 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_sem_create(&sem_startRobot, NULL, 0, S_FIFO)) {
-        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
-        exit(EXIT_FAILURE);
-    }
+//    if (err = rt_sem_create(&sem_startRobot, NULL, 0, S_FIFO)) {
+//        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+//        exit(EXIT_FAILURE);
+//    }
     if (err = rt_sem_create(&sem_getBattery, NULL, 0, S_FIFO)) {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
@@ -226,7 +230,7 @@ void Tasks::Join() {
  */
 void Tasks::ServerTask(void *arg) {
     int status;
-    
+
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are started)
     rt_sem_p(&sem_barrier, TM_INFINITE);
@@ -253,7 +257,7 @@ void Tasks::ServerTask(void *arg) {
  */
 void Tasks::SendToMonTask(void* arg) {
     Message *msg;
-    
+
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
@@ -278,11 +282,11 @@ void Tasks::SendToMonTask(void* arg) {
  */
 void Tasks::ReceiveFromMonTask(void *arg) {
     Message *msgRcv;
-    
+
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     /**************************************************************************************/
     /* The task receiveFromMon starts here                                                */
     /**************************************************************************************/
@@ -310,7 +314,10 @@ void Tasks::ReceiveFromMonTask(void *arg) {
             move = msgRcv->GetID();
             rt_mutex_release(&mutex_move);
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_BATTERY_GET)){
-            rt_sem_v(&sem_getBattery);
+            //rt_sem_v(&sem_getBattery);
+            rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
+            getBattery += 1; // On incrémente la variable si on reçoit encore la demande de niveau de batterie
+            rt_mutex_release(&mutex_getBattery);
         }
         else if (msgRcv->CompareID(MESSAGE_CAM_OPEN)){
             rt_sem_v(&sem_openCam);
@@ -332,7 +339,7 @@ void Tasks::OpenComRobot(void *arg) {
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     /**************************************************************************************/
     /* The task openComRobot starts here                                                  */
     /**************************************************************************************/
@@ -362,7 +369,7 @@ void Tasks::StartRobotTask(void *arg) {
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     /**************************************************************************************/
     /* The task startRobot starts here                                                    */
     /**************************************************************************************/
@@ -394,11 +401,11 @@ void Tasks::StartRobotTask(void *arg) {
 void Tasks::MoveTask(void *arg) {
     int rs;
     int cpMove;
-    
+
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     /**************************************************************************************/
     /* The task starts here                                                               */
     /**************************************************************************************/
@@ -414,9 +421,9 @@ void Tasks::MoveTask(void *arg) {
             rt_mutex_acquire(&mutex_move, TM_INFINITE);
             cpMove = move;
             rt_mutex_release(&mutex_move);
-            
+
             cout << " move: " << cpMove;
-            
+
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             robot.Write(new Message((MessageID)cpMove));
             rt_mutex_release(&mutex_robot);
@@ -432,11 +439,13 @@ void Tasks::MoveTask(void *arg) {
 void Tasks::CheckBattery(void *arg) {
     MessageBattery * msg;
     int rs;
-    
+    int counterBatt = 0;
+    int ancienBatt = 0;
+
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     // Synchronization (waiting that the monitor asks for the battery level
      rt_sem_p(&sem_getBattery, TM_INFINITE);
     /**************************************************************************************/
@@ -447,19 +456,37 @@ void Tasks::CheckBattery(void *arg) {
     while (1) {
         rt_task_wait_period(NULL);
         cout << "Periodic checking battery update";
+        //On vérifie que le robot est allumé
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         rs = robotStarted;
         rt_mutex_release(&mutex_robotStarted);
-        if (rs == 1) {
-            
-            //On récupère le niveau de la batterie
-            rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-            msg = (MessageBattery*)robot.Write(new Message(MESSAGE_ROBOT_BATTERY_GET));
-            rt_mutex_release(&mutex_robot);
-            
-            //Sending the level to the monitor
-            WriteInQueue(&q_messageToMon, msg); 
-            
+        //On vérifie qu'on nous demande toujours le niveau de la batterie
+        rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
+        counterBatt = getBattery; // On récupère la variable du nombre de demande de niveau de batterie
+        rt_mutex_release(&mutex_getBattery);
+
+        //on compare l'ancienne et la nouvelle valeur du compteur
+        if (ancienBatt /= counterBatt){
+            if (rs == 1) {
+
+                //On récupère le niveau de la batterie
+                rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+                msg = (MessageBattery*)robot.Write(new Message(MESSAGE_ROBOT_BATTERY_GET));
+                rt_mutex_release(&mutex_robot);
+
+                //Sending the level to the monitor
+                WriteInQueue(&q_messageToMon, msg);
+
+                //On incrémente l'ancienne valeur avec la nouvelle
+                ancienBatt = counterBatt;
+
+            }
+        } else {
+
+            rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
+            getBattery = 0; // On remet le mutex à 0
+            rt_mutex_release(&mutex_getBattery);
+
         }
         cout << endl << flush;
     }
@@ -476,7 +503,7 @@ void Tasks::manageCameraTask(void *arg) {
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
-    
+
     /**************************************************************************************/
     /* The task manageCamera starts here                                                    */
     /**************************************************************************************/
