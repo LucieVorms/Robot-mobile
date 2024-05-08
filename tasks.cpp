@@ -26,6 +26,7 @@
 #define PRIORITY_TRECEIVEFROMMON 25
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
+#define PRIORITY_TPICTURES 22
 #define PRIORITY_TBATTERY 19
 #define PRIORITY_TPOSITION 20
 
@@ -159,11 +160,11 @@ void Tasks::Init() {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_task_create(&th_takePicture, "th_takePicture", 0, PRIORITY_TCAMERA, 0)) {
+    if (err = rt_task_create(&th_takePicture, "th_takePictures", 0, PRIORITY_TPICTURES, 0)) {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_task_create(&th_computePosition, "th_takePicture", 0, PRIORITY_TPOSITION, 0)) {
+    if (err = rt_task_create(&th_computePosition, "th_computePosition", 0, PRIORITY_TPOSITION, 0)) {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
