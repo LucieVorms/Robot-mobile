@@ -81,7 +81,7 @@ private:
     RT_TASK th_move;
     RT_TASK th_checkBattery;
     RT_TASK th_manageCamera;
-    RT_TASK th_takePicture;
+    RT_TASK th_takePictures;
     RT_TASK th_computePosition;
 
     /**********************************************************************/
