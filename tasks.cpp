@@ -612,6 +612,8 @@ void Tasks::takePicturesTask(void *arg)
     /**************************************************************************************/
     /* The task takePicture starts here                                                    */
     /**************************************************************************************/
+
+    //Prise en compte de la demande de l'arrêt d'envoi periodique d'image ou non de calibrateArena
     rt_sem_p(&sem_stopPeriodicImg, TM_INFINITE);
     stop=1;
     rt_sem_p(&sem_restartPeriodicImg, TM_INFINITE);
