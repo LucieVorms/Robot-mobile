@@ -501,9 +501,7 @@ void Tasks::CheckBattery(void *arg) {
  * @brief Thread handling control of the robot.
  */
 void Tasks::manageCameraTask(void *arg) {
-    Camera * cam;
-    cam = new Camera(sm,10);
-
+    
     Message * msgSend;
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
@@ -549,10 +547,6 @@ void Tasks::manageCameraTask(void *arg) {
 
 void Tasks::takePicturesTask(void *arg)
 {
-    //Declaration de la camera
-    Camera * cam;
-    cam = new Camera(sm,10);
-
     //Creation d'un message pour envoyer l'image
     MessageImg *msgImg;
     //Variable de lecture de la variable partagee status_cam
@@ -573,32 +567,39 @@ void Tasks::takePicturesTask(void *arg)
 
         rt_mutex_acquire(&mutex_camera, TM_INFINITE);
         sc = status_cam;
+        cout << "Status recupere" << sc <<endl;
         rt_mutex_release(&mutex_camera);
 
         //prise de photo et envoie
         if (sc == true)
         {
+            rt_mutex_acquire(&mutex_camera, TM_INFINITE);
             img = new Img(cam->Grab());
-            msgImg= new MessageIm(MESSAGE_CAM_IMAGE, img)
+             cout << "Prise de photo"<<endl;
+            rt_mutex_release(&mutex_camera);
+ 
+            
+            msgImg= new MessageImg(MESSAGE_CAM_IMAGE, img);
             WriteInQueue(&q_messageToMon, msgImg); // msgImg will be deleted by sendToMon
+             cout << "msg envoye" << endl;
         }
     }
 
 }
 
-void Tasks::computePositionTask(void *arg)
-{
-
-    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
-    // Synchronization barrier (waiting that all tasks are starting)
-    rt_sem_p(&sem_barrier, TM_INFINITE);
-
-    /**************************************************************************************/
-    /* The task computePositionTask starts here                                                    */
-    /**************************************************************************************/
-    rt_sem_p(&sem_findPosition, TM_INFINITE);
-
-}
+//void Tasks::computePositionTask(void *arg)
+//{
+//
+//    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
+//    // Synchronization barrier (waiting that all tasks are starting)
+//    rt_sem_p(&sem_barrier, TM_INFINITE);
+//
+//    /**************************************************************************************/
+//    /* The task computePositionTask starts here                                                    */
+//    /**************************************************************************************/
+//    rt_sem_p(&sem_findPosition, TM_INFINITE);
+//
+//}
 
 
 /**
@@ -632,4 +633,3 @@ Message *Tasks::ReadInQueue(RT_QUEUE *queue) {
 
     return msg;
 }
-

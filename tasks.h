@@ -67,7 +67,9 @@ private:
     int robotStarted = 0;
     bool status_cam = false;
     int move = MESSAGE_ROBOT_STOP;
-    image *img;
+    Img *img;
+    
+    Camera * cam = new Camera(sm,10);
     /**********************************************************************/
     /* Tasks                                                              */
     /**********************************************************************/
@@ -162,7 +164,7 @@ private:
      /**
     * @brief Thread handling the finding, drawing and send the robot's position
     */
-    void computePositionTask(void *arg);
+    //void computePositionTask(void *arg);
 
 
     
@@ -186,4 +188,3 @@ private:
 };
 
 #endif // __TASKS_H__ 
-
