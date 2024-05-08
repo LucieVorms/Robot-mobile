@@ -612,11 +612,14 @@ void Tasks::takePicturesTask(void *arg)
     /**************************************************************************************/
     /* The task takePicture starts here                                                    */
     /**************************************************************************************/
-    // if not sem_stopPeriodicImg
+    rt_sem_p(&sem_stopPeriodicImg, TM_INFINITE);
+    stop=1;
+    rt_sem_p(&sem_restartPeriodicImg, TM_INFINITE);
+    stop=0;
 
     rt_task_set_periodic(NULL, TM_NOW, 100000000);
 
-    while (1) {
+    while (not stop) {
         rt_task_wait_period(NULL);
         cout << "Periodic taking and send picture update";
 
@@ -691,9 +694,8 @@ void Tasks::calibrateArenaTask(void *arg)
         //Non validation de l'arène
         rt_sem_p(&sem_unvalidatedArena, TM_INFINITE);
         cout << "Arene non validée" << endl;
-        rt_sem_v(&sem_restartPeriodicImg);
     }
-
+    rt_sem_v(&sem_restartPeriodicImg);
 
 }
 
