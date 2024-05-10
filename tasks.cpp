@@ -100,10 +100,10 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-//    if (err = rt_sem_create(&sem_startRobot, NULL, 0, S_FIFO)) {
-//        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
-//        exit(EXIT_FAILURE);
-//    }
+    if (err = rt_sem_create(&sem_startRobot, NULL, 0, S_FIFO)) {
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     if (err = rt_sem_create(&sem_getBattery, NULL, 0, S_FIFO)) {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
@@ -297,9 +297,30 @@ void Tasks::ReceiveFromMonTask(void *arg) {
         msgRcv = monitor.Read();
         cout << "Rcv <= " << msgRcv->ToString() << endl << flush;
 
+        //Perte de communication entre le moniteur et le superviseur
         if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
             delete(msgRcv);
-            exit(-1);
+            //exit(-1);
+            //Stopper le robot
+            rt_mutex_acquire(&mutex_move, TM_INFINITE);
+            move = MESSAGE_ROBOT_STOP;
+            rt_mutex_release(&mutex_move);
+
+            //Déconnecter la caméra
+            rt_sem_v(&sem_closeCam);
+
+            //Stopper la communication avec le robot
+            rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+            status = robot.Close();
+            rt_mutex_release(&mutex_robot);
+
+            //Fermeture du serveur
+            rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
+            status = monitor.Close(SERVER_PORT);
+            rt_mutex_release(&mutex_monitor);
+
+            cout<<"Monitor is lost"<<endl;
+
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
             rt_sem_v(&sem_openComRobot);
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITHOUT_WD)) {
@@ -314,7 +335,7 @@ void Tasks::ReceiveFromMonTask(void *arg) {
             move = msgRcv->GetID();
             rt_mutex_release(&mutex_move);
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_BATTERY_GET)){
-            //rt_sem_v(&sem_getBattery);
+            rt_sem_v(&sem_getBattery);
             rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
             getBattery += 1; // On incrémente la variable si on reçoit encore la demande de niveau de batterie
             rt_mutex_release(&mutex_getBattery);
@@ -335,6 +356,7 @@ void Tasks::ReceiveFromMonTask(void *arg) {
 void Tasks::OpenComRobot(void *arg) {
     int status;
     int err;
+    int cmpt;
 
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
@@ -359,6 +381,62 @@ void Tasks::OpenComRobot(void *arg) {
             msgSend = new Message(MESSAGE_ANSWER_ACK);
         }
         WriteInQueue(&q_messageToMon, msgSend); // msgSend will be deleted by sendToMon
+
+        //tant que le compteur d'erreur ne dépasse pas 3, on continue
+        while (cmpt <= 3){
+
+            //Envoi d'un message test au robot
+            Message * msgTest;
+            rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+            msgTest = robot.write(robot.Ping());
+            rt_mutex_release(&mutex_robot);
+
+            //On regarde si le message est bien parvenu au robot
+                if (msgTest->GetID() /= MESSAGE_ANSWER_ACK) {
+                    cmpt +=1 ; //S'il y a une erreur, on augmente le compteur
+                }
+
+            //Test
+            cout<< "le nbr d'erreurs est de "<< cmpt<<endl;
+        }
+
+        if (cmpt > 3){
+
+                //On dit au moniteur qu'il y a eu une perte de connexion
+                Message * msgSend
+                msgSend = new Message(MESSAGE_MONITOR_LOST);
+                WriteInQueue(&q_messageToMon, msgSend);
+
+                //On ferme la communication avec le robot
+                cout << "Closing serial com (";
+                rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+                status = robot.Close();
+                rt_mutex_release(&mutex_robot);
+                cout << status;
+                cout << ")" << endl << flush;
+
+
+                //Message d'acquittement pour vérifier la bonne fermeture de la communication
+                Message * msgSend;
+                if (status < 0) {
+                    msgSend = new Message(MESSAGE_ANSWER_NACK);
+                } else {
+                    msgSend = new Message(MESSAGE_ANSWER_ACK);
+                }
+                WriteInQueue(&q_messageToMon, msgSend);
+
+                //On ferme la caméra du robot
+                rt_sem_v(&sem_closeCam, TM_INFINITE);
+
+                //Envoi d'un message de redémarrage du robot
+                Message * msgRed;
+                rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+                msgRed = robot.write(robot.Reset());
+                rt_mutex_release(&mutex_robot);
+
+                cmpt = 0; //On remet la variable compteur à 0
+
+        }
     }
 }
 
@@ -460,10 +538,17 @@ void Tasks::CheckBattery(void *arg) {
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         rs = robotStarted;
         rt_mutex_release(&mutex_robotStarted);
+
+        //Test
+        cout<<"état robot récupéré"<< rs <<endl;
+
         //On vérifie qu'on nous demande toujours le niveau de la batterie
         rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
         counterBatt = getBattery; // On récupère la variable du nombre de demande de niveau de batterie
         rt_mutex_release(&mutex_getBattery);
+
+        //Test
+        cout<<"demande batterie récupérée"<< counterBatt <<endl;
 
         //on compare l'ancienne et la nouvelle valeur du compteur
         if (ancienBatt /= counterBatt){
@@ -474,18 +559,28 @@ void Tasks::CheckBattery(void *arg) {
                 msg = (MessageBattery*)robot.Write(new Message(MESSAGE_ROBOT_BATTERY_GET));
                 rt_mutex_release(&mutex_robot);
 
+                //Test
+                cout<<"la batterie du robot est:"<< msg <<endl;
+
                 //Sending the level to the monitor
                 WriteInQueue(&q_messageToMon, msg);
 
                 //On incrémente l'ancienne valeur avec la nouvelle
                 ancienBatt = counterBatt;
 
+                //Test
+                cout<<"ancienne batt vaut: "<< ancienBatt<<endl;
+
             }
+
         } else {
 
             rt_mutex_acquire(&mutex_getBattery, TM_INFINITE);
             getBattery = 0; // On remet le mutex à 0
             rt_mutex_release(&mutex_getBattery);
+
+            //Test
+            cout<<"getBattery vaut: "<< getBattery <<endl;
 
         }
         cout << endl << flush;

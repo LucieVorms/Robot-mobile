@@ -66,6 +66,7 @@ private:
     ComRobot robot;
     int robotStarted = 0;
     int move = MESSAGE_ROBOT_STOP;
+    int getBattery = 0;
 
     /**********************************************************************/
     /* Tasks                                                              */
@@ -96,7 +97,7 @@ private:
     RT_SEM sem_openComRobot;
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
-    //RT_SEM sem_getBattery;
+    RT_SEM sem_getBattery;
     RT_SEM sem_openCam;
     RT_SEM sem_closeCam;
 
