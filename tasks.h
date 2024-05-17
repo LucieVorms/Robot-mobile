@@ -67,9 +67,22 @@ private:
     int robotStarted = 0;
     bool status_cam = false;
     int move = MESSAGE_ROBOT_STOP;
-    Img *img;
+    int validation=0;
+
+    Arena arena_save;
+
+    Camera cam;
+
+    Img * img_cam;
     
-    Camera * cam = new Camera(sm,10);
+    int stop = 0;
+    
+    int validated_and_save = 0;
+    
+    int findPosition=0;
+    
+    int pos_valid=0;
+    
     /**********************************************************************/
     /* Tasks                                                              */
     /**********************************************************************/
@@ -80,9 +93,11 @@ private:
     RT_TASK th_startRobot;
     RT_TASK th_move;
     RT_TASK th_checkBattery;
-    RT_TASK th_manageCamera;
+    RT_TASK th_openCamera;
+    RT_TASK th_closeCamera;
     RT_TASK th_takePictures;
     RT_TASK th_computePosition;
+    RT_TASK th_calibrateArena;
 
     /**********************************************************************/
     /* Mutex                                                              */
@@ -92,6 +107,14 @@ private:
     RT_MUTEX mutex_robotStarted;
     RT_MUTEX mutex_move;
     RT_MUTEX mutex_camera;
+    RT_MUTEX mutex_status_cam;
+    RT_MUTEX mutex_image;
+    RT_MUTEX mutex_arena;
+    RT_MUTEX mutex_stop;
+    RT_MUTEX mutex_validation;
+    RT_MUTEX mutex_valid_save;
+    RT_MUTEX mutex_findPos;
+    RT_MUTEX mutex_validPos;
 
     /**********************************************************************/
     /* Semaphores                                                         */
@@ -101,10 +124,19 @@ private:
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
     RT_SEM sem_getBattery;
+
     RT_SEM sem_openCam;
     RT_SEM sem_closeCam;
+
     RT_SEM sem_findPosition;
     RT_SEM sem_stopPosition;
+
+    //Semaphores liés a calibration de l'arene
+    RT_SEM sem_findArena;
+    RT_SEM sem_stopPeriodicImg;
+    RT_SEM sem_restartPeriodicImg;
+    RT_SEM sem_Arena;
+    //RT_SEM sem_unvalidatedArena;
     
 
     /**********************************************************************/
@@ -154,7 +186,12 @@ private:
      /**
      * @brief Thread handling the managament of the camera
      */
-    void manageCameraTask(void *arg);
+    void openCameraTask(void *arg);
+    
+         /**
+     * @brief Thread handling the managament of the camera
+     */
+    void closeCameraTask(void *arg);
     
     /**
      * @brief Thread handling the taking and sending of the picture , periodicly
@@ -164,7 +201,12 @@ private:
      /**
     * @brief Thread handling the finding, drawing and send the robot's position
     */
-    //void computePositionTask(void *arg);
+    void computePositionTask(void *arg);
+
+    /**
+    * @brief Thread the calibration and validation of the arena
+    */
+    void calibrateArenaTask(void *arg);
 
 
     
