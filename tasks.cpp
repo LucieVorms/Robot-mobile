@@ -859,7 +859,7 @@ void Tasks::computePositionTask(void *arg)
     int fp=0;
     std::list<Position> LesPositionsRobot; // ou std::list<Position> PositionRobot?
     Position PositionRobot;
-    //Position PositionNulle;
+    Position PositionNulle;
    
 
     MessagePosition *msgPos;
@@ -917,8 +917,13 @@ void Tasks::computePositionTask(void *arg)
         else
         {
             cout << "Position nulle" << endl;
-            PositionRobot = LesPositionsRobot.front();
-            msgPos = new MessagePosition(MESSAGE_CAM_POSITION, PositionRobot);
+            //PositionRobot = LesPositionsRobot.front();
+            LesPositionsRobot.back().robotId=-1;
+            LesPositionsRobot.back().angle=-1;
+            LesPositionsRobot.back().center=cv::Point2f(-1.0,-1.0);
+            LesPositionsRobot.back().direction=cv::Point2f(-1.0,-1.0);
+            
+            msgPos = new MessagePosition(MESSAGE_CAM_POSITION, LesPositionsRobot.back());
             WriteInQueue(&q_messageToMon, msgPos);   
         }
         
